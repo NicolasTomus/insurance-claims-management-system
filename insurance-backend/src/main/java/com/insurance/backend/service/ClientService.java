@@ -1,7 +1,7 @@
 package com.insurance.backend.service;
 
 import com.insurance.backend.domain.client.Client;
-import com.insurance.backend.infrastructure.persistence.repository.ClientRepository;
+import com.insurance.backend.infrastructure.persistence.repository.client.ClientRepository;
 import com.insurance.backend.web.dto.client.ClientCreateRequest;
 import com.insurance.backend.web.dto.client.ClientDetailsResponse;
 import com.insurance.backend.web.dto.client.ClientSummaryResponse;

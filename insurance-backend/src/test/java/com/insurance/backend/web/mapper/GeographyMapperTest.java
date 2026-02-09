@@ -13,54 +13,66 @@ import static org.mockito.Mockito.*;
 
 class GeographyMapperTest {
 
+    private static final long COUNTRY_ID = 1L;
+    private static final long COUNTRY_ID_REF = 10L;
+
+    private static final long COUNTY_ID = 2L;
+    private static final long COUNTY_ID_REF = 20L;
+
+    private static final long CITY_ID = 3L;
+
+    private static final String COUNTRY_NAME = "Romania";
+    private static final String COUNTY_NAME = "Cluj";
+    private static final String CITY_NAME = "Cluj-Napoca";
+
     private final GeographyMapper geographyMapper = new GeographyMapper();
 
     @Test
-    void toCountry_shouldMapFields() {
-        Country c = mock(Country.class);
-        when(c.getId()).thenReturn(1L);
-        when(c.getName()).thenReturn("Romania");
+    void toCountryShouldMapFields() {
+        Country country = mock(Country.class);
+        when(country.getId()).thenReturn(COUNTRY_ID);
+        when(country.getName()).thenReturn(COUNTRY_NAME);
 
-        CountryResponse result = geographyMapper.toCountry(c);
+        CountryResponse result = geographyMapper.toCountry(country);
 
         assertNotNull(result);
-        assertEquals(1L, result.id());
-        assertEquals("Romania", result.name());
+        assertEquals(COUNTRY_ID, result.id());
+        assertEquals(COUNTRY_NAME, result.name());
     }
 
     @Test
-    void toCounty_shouldMapFields_andCountryId() {
+    void toCountyShouldMapFieldsAndCountryId() {
         Country country = mock(Country.class);
-        when(country.getId()).thenReturn(10L);
+        when(country.getId()).thenReturn(COUNTRY_ID_REF);
 
         County county = mock(County.class);
-        when(county.getId()).thenReturn(2L);
-        when(county.getName()).thenReturn("Cluj");
+        when(county.getId()).thenReturn(COUNTY_ID);
+        when(county.getName()).thenReturn(COUNTY_NAME);
         when(county.getCountry()).thenReturn(country);
 
         CountyResponse result = geographyMapper.toCounty(county);
 
         assertNotNull(result);
-        assertEquals(2L, result.id());
-        assertEquals("Cluj", result.name());
-        assertEquals(10L, result.countryId());
+        assertEquals(COUNTY_ID, result.id());
+        assertEquals(COUNTY_NAME, result.name());
+        assertEquals(COUNTRY_ID_REF, result.countryId());
     }
 
     @Test
-    void toCity_shouldMapFields_andCountyId() {
+    void toCityShouldMapFieldsAndCountyId() {
         County county = mock(County.class);
-        when(county.getId()).thenReturn(20L);
+        when(county.getId()).thenReturn(COUNTY_ID_REF);
 
         City city = mock(City.class);
-        when(city.getId()).thenReturn(3L);
-        when(city.getName()).thenReturn("Cluj-Napoca");
+        when(city.getId()).thenReturn(CITY_ID);
+        when(city.getName()).thenReturn(CITY_NAME);
         when(city.getCounty()).thenReturn(county);
 
         CityResponse result = geographyMapper.toCity(city);
 
         assertNotNull(result);
-        assertEquals(3L, result.id());
-        assertEquals("Cluj-Napoca", result.name());
-        assertEquals(20L, result.countyId());
+        assertEquals(CITY_ID, result.id());
+        assertEquals(CITY_NAME, result.name());
+        assertEquals(COUNTY_ID_REF, result.countyId());
     }
 }

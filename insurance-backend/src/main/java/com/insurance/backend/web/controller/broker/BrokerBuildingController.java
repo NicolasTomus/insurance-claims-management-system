@@ -23,11 +23,7 @@ public class BrokerBuildingController {
     }
 
     @GetMapping("/clients/{clientId}/buildings")
-    public Page<BuildingDetailsResponse> listForClient(@PathVariable Long clientId,
-                                                       @RequestParam(defaultValue = "0") int page,
-                                                       @RequestParam(defaultValue = "20") int size) {
-
-        Pageable pageable = PageRequest.of(page, size, Sort.by("id").descending());
+    public Page<BuildingDetailsResponse> listForClient(@PathVariable Long clientId, Pageable pageable) {
         return buildingService.listForClient(clientId, pageable);
     }
 

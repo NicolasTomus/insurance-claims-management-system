@@ -54,9 +54,6 @@ public class Client {
     public ClientType getClientType() {
         return clientType;
     }
-    public void setClientType(ClientType clientType) {
-        this.clientType = clientType;
-    }
 
     public String getName() {
         return name;

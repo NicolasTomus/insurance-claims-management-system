@@ -2,7 +2,7 @@ package com.insurance.backend.service;
 
 import com.insurance.backend.domain.client.Client;
 import com.insurance.backend.domain.client.ClientType;
-import com.insurance.backend.infrastructure.persistence.repository.ClientRepository;
+import com.insurance.backend.infrastructure.persistence.repository.client.ClientRepository;
 import com.insurance.backend.web.dto.client.ClientCreateRequest;
 import com.insurance.backend.web.dto.client.ClientDetailsResponse;
 import com.insurance.backend.web.dto.client.ClientSummaryResponse;
@@ -15,7 +15,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.domain.*;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
 import java.util.List;
 import java.util.Optional;
@@ -25,6 +28,50 @@ import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class ClientServiceTest {
+
+    private static final long CLIENT_ID = 10L;
+
+    private static final String IDENTIFICATION_NUMBER = "ID-123";
+    private static final String NAME = "Johnny Test";
+    private static final String EMAIL = "johnny@test.com";
+    private static final String PHONE = "0700000000";
+    private static final String ADDRESS = "Address";
+
+    private static final String UPDATED_NAME = "New Name";
+    private static final String UPDATED_EMAIL = "new@email.com";
+    private static final String UPDATED_PHONE = "0711111111";
+    private static final String UPDATED_ADDRESS = "New Address";
+
+    private static final String OLD_IDENTIFICATION_NUMBER = "ID-OLD";
+    private static final String NEW_IDENTIFICATION_NUMBER = "ID-NEW";
+
+    private static final String SEARCH_NAME = "johnny";
+
+
+    private static Pageable defaultPageable() {
+        return PageRequest.of(0, 10);
+    }
+
+    private static ClientCreateRequest createRequest() {
+        return new ClientCreateRequest(
+                ClientType.INDIVIDUAL,
+                NAME,
+                IDENTIFICATION_NUMBER,
+                EMAIL,
+                PHONE,
+                ADDRESS
+        );
+    }
+
+    private static ClientUpdateRequest updateRequest(String identificationNumber) {
+        return new ClientUpdateRequest(
+                UPDATED_NAME,
+                UPDATED_EMAIL,
+                UPDATED_PHONE,
+                UPDATED_ADDRESS,
+                identificationNumber
+        );
+    }
 
     @Mock
     private ClientRepository clientRepository;
@@ -36,41 +83,27 @@ class ClientServiceTest {
     private ClientService clientService;
 
     @Test
-    void create_shouldThrowConflict_whenIdentificationNumberAlreadyExists() {
-        ClientCreateRequest req = new ClientCreateRequest(
-                ClientType.INDIVIDUAL,
-                "Johnny Test",
-                "ID-123",
-                "johnny@test.com",
-                "0700000000",
-                "Address"
-        );
+    void createShouldThrowConflictWhenIdentificationNumberAlreadyExists() {
+        ClientCreateRequest req = createRequest();
 
-        when(clientRepository.existsByIdentificationNumber("ID-123")).thenReturn(true);
+        when(clientRepository.existsByIdentificationNumber(IDENTIFICATION_NUMBER)).thenReturn(true);
 
         assertThrows(ConflictException.class, () -> clientService.create(req));
 
-        verify(clientRepository).existsByIdentificationNumber("ID-123");
+        verify(clientRepository).existsByIdentificationNumber(IDENTIFICATION_NUMBER);
         verifyNoMoreInteractions(clientRepository);
         verifyNoInteractions(clientMapper);
     }
 
     @Test
-    void create_shouldSaveAndReturnDetails_whenOk() {
-        ClientCreateRequest req = new ClientCreateRequest(
-                ClientType.INDIVIDUAL,
-                "Johnny Test",
-                "ID-123",
-                "johnny@test.com",
-                "0700000000",
-                "Address"
-        );
+    void createShouldSaveAndReturnDetailsWhenOk() {
+        ClientCreateRequest req = createRequest();
 
         Client entity = mock(Client.class);
         Client saved = mock(Client.class);
         ClientDetailsResponse dto = mock(ClientDetailsResponse.class);
 
-        when(clientRepository.existsByIdentificationNumber("ID-123")).thenReturn(false);
+        when(clientRepository.existsByIdentificationNumber(IDENTIFICATION_NUMBER)).thenReturn(false);
         when(clientMapper.toEntity(req)).thenReturn(entity);
         when(clientRepository.save(entity)).thenReturn(saved);
         when(clientMapper.toDetails(saved)).thenReturn(dto);
@@ -80,100 +113,82 @@ class ClientServiceTest {
         assertNotNull(result);
         assertSame(dto, result);
 
-        verify(clientRepository).existsByIdentificationNumber("ID-123");
+        verify(clientRepository).existsByIdentificationNumber(IDENTIFICATION_NUMBER);
         verify(clientRepository).save(entity);
         verify(clientMapper).toEntity(req);
         verify(clientMapper).toDetails(saved);
     }
 
     @Test
-    void getById_shouldThrowNotFound_whenClientMissing() {
-        when(clientRepository.findById(10L)).thenReturn(Optional.empty());
+    void getByIdShouldThrowNotFoundWhenClientMissing() {
+        when(clientRepository.findById(CLIENT_ID)).thenReturn(Optional.empty());
 
-        assertThrows(NotFoundException.class, () -> clientService.getById(10L));
+        assertThrows(NotFoundException.class, () -> clientService.getById(CLIENT_ID));
 
-        verify(clientRepository).findById(10L);
+        verify(clientRepository).findById(CLIENT_ID);
         verifyNoInteractions(clientMapper);
     }
 
     @Test
-    void getById_shouldReturnDetails_whenClientExists() {
+    void getByIdShouldReturnDetailsWhenClientExists() {
         Client client = mock(Client.class);
         ClientDetailsResponse dto = mock(ClientDetailsResponse.class);
 
-        when(clientRepository.findById(10L)).thenReturn(Optional.of(client));
+        when(clientRepository.findById(CLIENT_ID)).thenReturn(Optional.of(client));
         when(clientMapper.toDetails(client)).thenReturn(dto);
 
-        ClientDetailsResponse result = clientService.getById(10L);
+        ClientDetailsResponse result = clientService.getById(CLIENT_ID);
 
         assertNotNull(result);
         assertSame(dto, result);
 
-        verify(clientRepository).findById(10L);
+        verify(clientRepository).findById(CLIENT_ID);
         verify(clientMapper).toDetails(client);
     }
 
     @Test
-    void update_shouldThrowNotFound_whenClientMissing() {
-        when(clientRepository.findById(10L)).thenReturn(Optional.empty());
+    void updateShouldThrowNotFoundWhenClientMissing() {
+        when(clientRepository.findById(CLIENT_ID)).thenReturn(Optional.empty());
 
-        ClientUpdateRequest req = new ClientUpdateRequest(
-                "New Name",
-                "new@email.com",
-                "0711111111",
-                "New Address",
-                null
-        );
+        ClientUpdateRequest req = updateRequest(null);
 
-        assertThrows(NotFoundException.class, () -> clientService.update(10L, req));
+        assertThrows(NotFoundException.class, () -> clientService.update(CLIENT_ID, req));
 
-        verify(clientRepository).findById(10L);
+        verify(clientRepository).findById(CLIENT_ID);
         verifyNoInteractions(clientMapper);
     }
 
     @Test
-    void update_shouldThrowConflict_whenIdentificationNumberChanges() {
+    void updateShouldThrowConflictWhenIdentificationNumberChanges() {
         Client client = mock(Client.class);
 
-        when(clientRepository.findById(10L)).thenReturn(Optional.of(client));
-        when(client.getIdentificationNumber()).thenReturn("ID-OLD");
+        when(clientRepository.findById(CLIENT_ID)).thenReturn(Optional.of(client));
+        when(client.getIdentificationNumber()).thenReturn(OLD_IDENTIFICATION_NUMBER);
 
-        ClientUpdateRequest req = new ClientUpdateRequest(
-                "New Name",
-                "new@email.com",
-                "0711111111",
-                "New Address",
-                "ID-NEW"
-        );
+        ClientUpdateRequest req = updateRequest(NEW_IDENTIFICATION_NUMBER);
 
-        assertThrows(ConflictException.class, () -> clientService.update(10L, req));
+        assertThrows(ConflictException.class, () -> clientService.update(CLIENT_ID, req));
 
-        verify(clientRepository).findById(10L);
+        verify(clientRepository).findById(CLIENT_ID);
         verify(client, atLeastOnce()).getIdentificationNumber();
         verify(clientRepository, never()).save(any());
         verify(clientMapper, never()).applyUpdate(any(), any());
     }
 
     @Test
-    void update_shouldUpdateAndReturnDetails_whenOk() {
+    void updateShouldUpdateAndReturnDetailsWhenOk() {
         Client client = mock(Client.class);
         Client saved = mock(Client.class);
         ClientDetailsResponse dto = mock(ClientDetailsResponse.class);
 
-        when(clientRepository.findById(10L)).thenReturn(Optional.of(client));
-        when(client.getIdentificationNumber()).thenReturn("ID-123");
+        when(clientRepository.findById(CLIENT_ID)).thenReturn(Optional.of(client));
+        when(client.getIdentificationNumber()).thenReturn(IDENTIFICATION_NUMBER);
         when(clientRepository.save(client)).thenReturn(saved);
         when(clientMapper.toDetails(saved)).thenReturn(dto);
 
-        ClientUpdateRequest req = new ClientUpdateRequest(
-                "New Name",
-                "new@email.com",
-                "0711111111",
-                "New Address",
-                "ID-123"
-        );
+        ClientUpdateRequest req = updateRequest(IDENTIFICATION_NUMBER);
 
-        ClientDetailsResponse result = clientService.update(10L, req);
+        ClientDetailsResponse result = clientService.update(CLIENT_ID, req);
 
         assertNotNull(result);
         assertSame(dto, result);
@@ -184,43 +199,43 @@ class ClientServiceTest {
     }
 
     @Test
-    void search_shouldSearchByIdentifier_andThrowNotFound_whenNotFound() {
-        Pageable pageable = PageRequest.of(0, 10);
+    void searchShouldSearchByIdentifierAndThrowNotFoundWhenNotFound() {
+        Pageable pageable = defaultPageable();
 
-        when(clientRepository.findByIdentificationNumber("ID-123"))
-                .thenReturn(Optional.empty());
+        when(clientRepository.findByIdentificationNumber(IDENTIFICATION_NUMBER)).thenReturn(Optional.empty());
 
-        assertThrows(NotFoundException.class, () -> clientService.search(null, "ID-123", pageable));
+        assertThrows(NotFoundException.class, () -> clientService.search(null, IDENTIFICATION_NUMBER, pageable));
 
-        verify(clientRepository).findByIdentificationNumber("ID-123");
+        verify(clientRepository).findByIdentificationNumber(IDENTIFICATION_NUMBER);
         verify(clientRepository, never()).findByNameContainingIgnoreCase(anyString(), any());
         verify(clientRepository, never()).findAll(any(Pageable.class));
+        verifyNoInteractions(clientMapper);
     }
 
     @Test
-    void search_shouldSearchByIdentifier_andReturnOneItem_whenFound() {
-        Pageable pageable = PageRequest.of(0, 10);
+    void searchShouldSearchByIdentifierAndReturnOneItemWhenFound() {
+        Pageable pageable = defaultPageable();
 
         Client client = mock(Client.class);
         ClientSummaryResponse summary = mock(ClientSummaryResponse.class);
 
-        when(clientRepository.findByIdentificationNumber("ID-123")).thenReturn(Optional.of(client));
+        when(clientRepository.findByIdentificationNumber(IDENTIFICATION_NUMBER)).thenReturn(Optional.of(client));
         when(clientMapper.toSummary(client)).thenReturn(summary);
 
-        Page<ClientSummaryResponse> result = clientService.search(null, "ID-123", pageable);
+        Page<ClientSummaryResponse> result = clientService.search(null, IDENTIFICATION_NUMBER, pageable);
 
         assertNotNull(result);
         assertEquals(1, result.getTotalElements());
         assertEquals(1, result.getContent().size());
         assertSame(summary, result.getContent().getFirst());
 
-        verify(clientRepository).findByIdentificationNumber("ID-123");
+        verify(clientRepository).findByIdentificationNumber(IDENTIFICATION_NUMBER);
         verify(clientMapper).toSummary(client);
     }
 
     @Test
-    void search_shouldSearchByName_whenNameProvided() {
-        Pageable pageable = PageRequest.of(0, 10);
+    void searchShouldSearchByNameWhenNameProvided() {
+        Pageable pageable = defaultPageable();
 
         Client c1 = mock(Client.class);
         Client c2 = mock(Client.class);
@@ -228,31 +243,30 @@ class ClientServiceTest {
         ClientSummaryResponse s1 = mock(ClientSummaryResponse.class);
         ClientSummaryResponse s2 = mock(ClientSummaryResponse.class);
 
-        when(clientRepository.findByNameContainingIgnoreCase("johnny", pageable))
+        when(clientRepository.findByNameContainingIgnoreCase(SEARCH_NAME, pageable))
                 .thenReturn(new PageImpl<>(List.of(c1, c2), pageable, 2));
         when(clientMapper.toSummary(c1)).thenReturn(s1);
         when(clientMapper.toSummary(c2)).thenReturn(s2);
 
-        Page<ClientSummaryResponse> result = clientService.search("johnny", "", pageable);
+        Page<ClientSummaryResponse> result = clientService.search(SEARCH_NAME, "", pageable);
 
         assertNotNull(result);
         assertEquals(2, result.getTotalElements());
         assertEquals(2, result.getContent().size());
 
-        verify(clientRepository).findByNameContainingIgnoreCase("johnny", pageable);
+        verify(clientRepository).findByNameContainingIgnoreCase(SEARCH_NAME, pageable);
         verify(clientMapper).toSummary(c1);
         verify(clientMapper).toSummary(c2);
     }
 
     @Test
-    void search_shouldReturnAll_whenNoFilters() {
-        Pageable pageable = PageRequest.of(0, 10);
+    void searchShouldReturnAllWhenNoFilters() {
+        Pageable pageable = defaultPageable();
 
         Client c1 = mock(Client.class);
         ClientSummaryResponse s1 = mock(ClientSummaryResponse.class);
 
-        when(clientRepository.findAll(pageable))
-                .thenReturn(new PageImpl<>(List.of(c1), pageable, 1));
+        when(clientRepository.findAll(pageable)).thenReturn(new PageImpl<>(List.of(c1), pageable, 1));
         when(clientMapper.toSummary(c1)).thenReturn(s1);
 
         Page<ClientSummaryResponse> result = clientService.search(null, null, pageable);

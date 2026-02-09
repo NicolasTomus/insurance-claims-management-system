@@ -1,8 +1,8 @@
 package com.insurance.backend.service;
 
-import com.insurance.backend.infrastructure.persistence.repository.CityRepository;
-import com.insurance.backend.infrastructure.persistence.repository.CountyRepository;
-import com.insurance.backend.infrastructure.persistence.repository.CountryRepository;
+import com.insurance.backend.infrastructure.persistence.repository.geografy.CityRepository;
+import com.insurance.backend.infrastructure.persistence.repository.geografy.CountyRepository;
+import com.insurance.backend.infrastructure.persistence.repository.geografy.CountryRepository;
 import com.insurance.backend.web.dto.geography.CityResponse;
 import com.insurance.backend.web.dto.geography.CountyResponse;
 import com.insurance.backend.web.dto.geography.CountryResponse;

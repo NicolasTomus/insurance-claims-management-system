@@ -142,9 +142,6 @@ public class Building {
     public Client getOwner() {
         return owner;
     }
-    public void setOwner(Client owner) {
-        this.owner = owner;
-    }
 
     public String getAddress() {
         return address;
