@@ -4,9 +4,9 @@ import com.insurance.backend.domain.building.Building;
 import com.insurance.backend.domain.building.BuildingType;
 import com.insurance.backend.domain.client.Client;
 import com.insurance.backend.domain.geography.City;
-import com.insurance.backend.infrastructure.persistence.repository.BuildingRepository;
-import com.insurance.backend.infrastructure.persistence.repository.CityRepository;
-import com.insurance.backend.infrastructure.persistence.repository.ClientRepository;
+import com.insurance.backend.infrastructure.persistence.repository.building.BuildingRepository;
+import com.insurance.backend.infrastructure.persistence.repository.geografy.CityRepository;
+import com.insurance.backend.infrastructure.persistence.repository.client.ClientRepository;
 import com.insurance.backend.web.dto.building.BuildingCreateRequest;
 import com.insurance.backend.web.dto.building.BuildingDetailsResponse;
 import com.insurance.backend.web.dto.building.BuildingUpdateRequest;
@@ -30,6 +30,58 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class BuildingServiceTest {
 
+    private static final String SOME_ADDRESS = "Iulius Town";
+    private static final BigDecimal RENT_AMOUNT = new BigDecimal("120.50");
+    private static final BigDecimal INSURED_SUM = new BigDecimal("150000.00");
+
+
+    private static final int DEFAULT_YEAR_BUILT = 2000;
+    private static final BuildingType DEFAULT_BUILDING_TYPE = BuildingType.RESIDENTIAL;
+    private static final int DEFAULT_FLOORS = 2;
+
+    private static BuildingCreateRequest buildCreateRequest(Long cityId) {
+        return new BuildingCreateRequest(
+                SOME_ADDRESS,
+                cityId,
+                DEFAULT_YEAR_BUILT,
+                DEFAULT_BUILDING_TYPE,
+                DEFAULT_FLOORS,
+                RENT_AMOUNT,
+                INSURED_SUM,
+                false,
+                true
+        );
+    }
+
+    private static BuildingUpdateRequest buildMinimalUpdateRequest(Long ownerId, Long cityId) {
+        return new BuildingUpdateRequest(
+                ownerId,
+                SOME_ADDRESS,
+                cityId,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+        );
+    }
+
+    private static BuildingUpdateRequest buildFullUpdateRequest(Long ownerId, Long cityId) {
+        return new BuildingUpdateRequest(
+                ownerId,
+                SOME_ADDRESS,
+                cityId,
+                DEFAULT_YEAR_BUILT,
+                DEFAULT_BUILDING_TYPE,
+                DEFAULT_FLOORS,
+                RENT_AMOUNT,
+                INSURED_SUM,
+                Boolean.FALSE,
+                Boolean.TRUE
+        );
+    }
     @Mock
     private BuildingRepository buildingRepository;
 
@@ -46,22 +98,12 @@ class BuildingServiceTest {
     private BuildingService buildingService;
 
     @Test
-    void createForClient_shouldThrow_whenClientNotFound() {
+    void createForClientShouldThrowWhenClientNotFound() {
         Long clientId = 10L;
 
         when(clientRepository.findById(clientId)).thenReturn(Optional.empty());
 
-        BuildingCreateRequest req = new BuildingCreateRequest(
-                "Some address",
-                100L,
-                2000,
-                BuildingType.RESIDENTIAL,
-                2,
-                new BigDecimal("120.50"),
-                new BigDecimal("150000.00"),
-                false,
-                true
-        );
+        BuildingCreateRequest req = buildCreateRequest(100L);
 
         assertThrows(NotFoundException.class, () -> buildingService.createForClient(clientId, req));
 
@@ -69,7 +111,7 @@ class BuildingServiceTest {
     }
 
     @Test
-    void createForClient_shouldThrow_whenCityNotFound() {
+    void createForClientShouldThrowWhenCityNotFound() {
         Long clientId = 10L;
         Long cityId = 100L;
 
@@ -78,17 +120,7 @@ class BuildingServiceTest {
         when(clientRepository.findById(clientId)).thenReturn(Optional.of(owner));
         when(cityRepository.findById(cityId)).thenReturn(Optional.empty());
 
-        BuildingCreateRequest req = new BuildingCreateRequest(
-                "Some address",
-                cityId,
-                2000,
-                BuildingType.RESIDENTIAL,
-                2,
-                new BigDecimal("120.50"),
-                new BigDecimal("150000.00"),
-                false,
-                true
-        );
+        BuildingCreateRequest req = buildCreateRequest(cityId);
 
         assertThrows(NotFoundException.class, () -> buildingService.createForClient(clientId, req));
 
@@ -97,7 +129,7 @@ class BuildingServiceTest {
     }
 
     @Test
-    void createForClient_shouldCreateBuilding_whenOk() {
+    void createForClientShouldCreateBuildingWhenOk() {
         Long clientId = 10L;
         Long cityId = 100L;
 
@@ -111,17 +143,7 @@ class BuildingServiceTest {
         when(clientRepository.findById(clientId)).thenReturn(Optional.of(owner));
         when(cityRepository.findById(cityId)).thenReturn(Optional.of(city));
 
-        BuildingCreateRequest req = new BuildingCreateRequest(
-                "Some address",
-                cityId,
-                2000,
-                BuildingType.RESIDENTIAL,
-                2,
-                new BigDecimal("120.50"),
-                new BigDecimal("150000.00"),
-                false,
-                true
-        );
+        BuildingCreateRequest req = buildCreateRequest(cityId);
 
         when(buildingMapper.toEntity(req, owner, city)).thenReturn(entity);
         when(buildingRepository.save(entity)).thenReturn(saved);
@@ -137,7 +159,7 @@ class BuildingServiceTest {
     }
 
     @Test
-    void listForClient_shouldThrow_whenClientDoesNotExist() {
+    void listForClientShouldThrowWhenClientDoesNotExist() {
         Long clientId = 1L;
 
         when(clientRepository.existsById(clientId)).thenReturn(false);
@@ -149,7 +171,7 @@ class BuildingServiceTest {
     }
 
     @Test
-    void listForClient_shouldReturnPage_whenOk() {
+    void listForClientShouldReturnPageWhenOk() {
         Long clientId = 1L;
         Pageable pageable = PageRequest.of(0, 20);
 
@@ -175,7 +197,7 @@ class BuildingServiceTest {
     }
 
     @Test
-    void getById_shouldThrow_whenNotFound() {
+    void getByIdShouldThrowWhenNotFound() {
         when(buildingRepository.findById(7L)).thenReturn(Optional.empty());
 
         assertThrows(NotFoundException.class, () -> buildingService.getById(7L));
@@ -184,7 +206,7 @@ class BuildingServiceTest {
     }
 
     @Test
-    void getById_shouldReturnDto_whenFound() {
+    void getByIdShouldReturnDtoWhenFound() {
         Building b = mock(Building.class);
         BuildingDetailsResponse dto = mock(BuildingDetailsResponse.class);
 
@@ -198,21 +220,10 @@ class BuildingServiceTest {
     }
 
     @Test
-    void update_shouldThrow_whenBuildingNotFound() {
+    void updateShouldThrowWhenBuildingNotFound() {
         when(buildingRepository.findById(50L)).thenReturn(Optional.empty());
 
-        BuildingUpdateRequest req = new BuildingUpdateRequest(
-                1L,
-                "addr",
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null
-        );
+        BuildingUpdateRequest req = buildMinimalUpdateRequest(1L, null);
 
         assertThrows(NotFoundException.class, () -> buildingService.update(50L, req));
 
@@ -220,7 +231,7 @@ class BuildingServiceTest {
     }
 
     @Test
-    void update_shouldThrowConflict_whenClientIdIsDifferent() {
+    void updateShouldThrowConflictWhenClientIdIsDifferent() {
         Long buildingId = 50L;
 
         Building b = mock(Building.class);
@@ -230,18 +241,7 @@ class BuildingServiceTest {
 
         when(buildingRepository.findById(buildingId)).thenReturn(Optional.of(b));
 
-        BuildingUpdateRequest req = new BuildingUpdateRequest(
-                2L,
-                "addr",
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null
-        );
+        BuildingUpdateRequest req = buildMinimalUpdateRequest(2L, null);
 
         assertThrows(ConflictException.class, () -> buildingService.update(buildingId, req));
 
@@ -249,7 +249,7 @@ class BuildingServiceTest {
     }
 
     @Test
-    void update_shouldThrow_whenCityIdProvidedButCityNotFound() {
+    void updateShouldThrowWhenCityIdProvidedButCityNotFound() {
         Long buildingId = 50L;
         Long cityId = 123L;
 
@@ -261,17 +261,7 @@ class BuildingServiceTest {
         when(buildingRepository.findById(buildingId)).thenReturn(Optional.of(b));
         when(cityRepository.findById(cityId)).thenReturn(Optional.empty());
 
-        BuildingUpdateRequest req = new BuildingUpdateRequest(
-                1L,
-                "addr", cityId,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null
-        );
+        BuildingUpdateRequest req = buildMinimalUpdateRequest(1L, cityId);
 
         assertThrows(NotFoundException.class, () -> buildingService.update(buildingId, req));
 
@@ -279,7 +269,7 @@ class BuildingServiceTest {
     }
 
     @Test
-    void update_shouldUpdate_whenCityIdProvided() {
+    void updateShouldUpdateWhenCityIdProvided() {
         Long buildingId = 50L;
         Long cityId = 123L;
 
@@ -298,18 +288,7 @@ class BuildingServiceTest {
         when(buildingRepository.save(b)).thenReturn(saved);
         when(buildingMapper.toDetails(saved)).thenReturn(dto);
 
-        BuildingUpdateRequest req = new BuildingUpdateRequest(
-                1L,
-                "Some address",
-                cityId,
-                2000,
-                BuildingType.RESIDENTIAL,
-                2,
-                new BigDecimal("120.50"),
-                new BigDecimal("150000.00"),
-                Boolean.FALSE,
-                Boolean.TRUE
-        );
+        BuildingUpdateRequest req = buildFullUpdateRequest(1L, cityId);
 
         BuildingDetailsResponse result = buildingService.update(buildingId, req);
 
@@ -321,7 +300,7 @@ class BuildingServiceTest {
     }
 
     @Test
-    void update_shouldUpdate_whenCityIdIsNull() {
+    void updateShouldUpdateWhenCityIdIsNull() {
         Long buildingId = 50L;
 
         Building b = mock(Building.class);
@@ -336,18 +315,7 @@ class BuildingServiceTest {
         when(buildingRepository.save(b)).thenReturn(saved);
         when(buildingMapper.toDetails(saved)).thenReturn(dto);
 
-        BuildingUpdateRequest req = new BuildingUpdateRequest(
-                1L,
-                "addr",
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null
-        );
+        BuildingUpdateRequest req = buildMinimalUpdateRequest(1L, null);
 
         BuildingDetailsResponse result = buildingService.update(buildingId, req);
 

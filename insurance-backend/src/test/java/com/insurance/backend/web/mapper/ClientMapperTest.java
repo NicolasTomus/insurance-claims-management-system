@@ -17,92 +17,124 @@ import static org.mockito.Mockito.*;
 
 class ClientMapperTest {
 
+    private static final long CLIENT_ID = 10L;
+
+    private static final String NAME_RAW = "  Johnny Test";
+    private static final String NAME_TRIM = "Johnny Test";
+
+    private static final String ID_RAW = "  ID-123  ";
+    private static final String ID_TRIM = "ID-123";
+
+    private static final String EMAIL = "johnny@test.com";
+    private static final String PHONE = "0700000000";
+    private static final String ADDRESS = "Address";
+
+    private static final String OLD_NAME = "Old Name";
+    private static final String NEW_NAME_RAW = "  New Name  ";
+    private static final String NEW_NAME_TRIM = "New Name";
+
+    private static final String OLD_EMAIL = "old@mail.com";
+    private static final String NEW_PHONE = "0711111111";
+    private static final String OLD_PHONE = "0700";
+    private static final String OLD_ADDRESS = "Old address";
+
+    private static final String IDENTIFICATION_1 = "ID-1";
+    private static final String IDENTIFICATION_IGNORED = "ID-IGNORED";
+
+    private static final String SUMMARY_NAME = "Johnny";
+
+    private static final String COMPANY_NAME = "Company";
+    private static final String COMPANY_ID = "C-1";
+    private static final String COMPANY_EMAIL = "c@c.com";
+    private static final String COMPANY_PHONE = "0700";
+    private static final String COMPANY_ADDRESS = "Addr";
+
     private final BuildingMapper buildingMapper = mock(BuildingMapper.class);
     private final ClientMapper clientMapper = new ClientMapper(buildingMapper);
 
     @Test
-    void toEntity_shouldTrimNameAndIdentificationNumber() {
+    void toEntityShouldTrimNameAndIdentificationNumber() {
         ClientCreateRequest req = new ClientCreateRequest(
                 ClientType.INDIVIDUAL,
-                "  Johnny Test",
-                "  ID-123  ",
-                "johnny@test.com",
-                "0700000000",
-                "Address"
+                NAME_RAW,
+                ID_RAW,
+                EMAIL,
+                PHONE,
+                ADDRESS
         );
 
         Client result = clientMapper.toEntity(req);
 
         assertNotNull(result);
         assertEquals(ClientType.INDIVIDUAL, result.getClientType());
-        assertEquals("Johnny Test", result.getName());
-        assertEquals("ID-123", result.getIdentificationNumber());
-        assertEquals("johnny@test.com", result.getEmail());
-        assertEquals("0700000000", result.getPhone());
-        assertEquals("Address", result.getAddress());
+        assertEquals(NAME_TRIM, result.getName());
+        assertEquals(ID_TRIM, result.getIdentificationNumber());
+        assertEquals(EMAIL, result.getEmail());
+        assertEquals(PHONE, result.getPhone());
+        assertEquals(ADDRESS, result.getAddress());
     }
 
     @Test
-    void applyUpdate_shouldUpdateOnlyNonNullFields_andTrimName() {
+    void applyUpdateShouldUpdateOnlyNonNullFieldsAndTrimName() {
         Client client = new Client(
                 ClientType.COMPANY,
-                "Old Name",
-                "ID-1",
-                "old@mail.com",
-                "0700",
-                "Old address"
+                OLD_NAME,
+                IDENTIFICATION_1,
+                OLD_EMAIL,
+                OLD_PHONE,
+                OLD_ADDRESS
         );
 
         ClientUpdateRequest req = new ClientUpdateRequest(
-                "  New Name  ",
+                NEW_NAME_RAW,
                 null,
-                "0711111111",
+                NEW_PHONE,
                 null,
-                "ID-IGNORED"
+                IDENTIFICATION_IGNORED
         );
 
         clientMapper.applyUpdate(client, req);
 
-        assertEquals("New Name", client.getName());
-        assertEquals("old@mail.com", client.getEmail());
-        assertEquals("0711111111", client.getPhone());
-        assertEquals("Old address", client.getAddress());
-        assertEquals("ID-1", client.getIdentificationNumber());
+        assertEquals(NEW_NAME_TRIM, client.getName());
+        assertEquals(OLD_EMAIL, client.getEmail());
+        assertEquals(NEW_PHONE, client.getPhone());
+        assertEquals(OLD_ADDRESS, client.getAddress());
+        assertEquals(IDENTIFICATION_1, client.getIdentificationNumber());
     }
 
     @Test
-    void toSummary_shouldMapFields() {
-        Client c = mock(Client.class);
+    void toSummaryShouldMapFields() {
+        Client client = mock(Client.class);
 
-        when(c.getId()).thenReturn(10L);
-        when(c.getClientType()).thenReturn(ClientType.INDIVIDUAL);
-        when(c.getName()).thenReturn("Johnny");
-        when(c.getIdentificationNumber()).thenReturn("ID-123");
+        when(client.getId()).thenReturn(CLIENT_ID);
+        when(client.getClientType()).thenReturn(ClientType.INDIVIDUAL);
+        when(client.getName()).thenReturn(SUMMARY_NAME);
+        when(client.getIdentificationNumber()).thenReturn(ID_TRIM);
 
-        ClientSummaryResponse result = clientMapper.toSummary(c);
+        ClientSummaryResponse result = clientMapper.toSummary(client);
 
         assertNotNull(result);
-        assertEquals(10L, result.id());
+        assertEquals(CLIENT_ID, result.id());
         assertEquals(ClientType.INDIVIDUAL, result.clientType());
-        assertEquals("Johnny", result.name());
-        assertEquals("ID-123", result.identificationNumber());
+        assertEquals(SUMMARY_NAME, result.name());
+        assertEquals(ID_TRIM, result.identificationNumber());
     }
 
     @Test
-    void toDetails_shouldMapFields_andMapBuildingsWithBuildingMapper() {
-        Client c = mock(Client.class);
+    void toDetailsShouldMapFieldsAndMapBuildingsWithBuildingMapper() {
+        Client client = mock(Client.class);
 
         Building b1 = mock(Building.class);
         Building b2 = mock(Building.class);
 
-        when(c.getId()).thenReturn(10L);
-        when(c.getClientType()).thenReturn(ClientType.COMPANY);
-        when(c.getName()).thenReturn("Company");
-        when(c.getIdentificationNumber()).thenReturn("C-1");
-        when(c.getEmail()).thenReturn("c@c.com");
-        when(c.getPhone()).thenReturn("0700");
-        when(c.getAddress()).thenReturn("Addr");
-        when(c.getBuildings()).thenReturn(List.of(b1, b2));
+        when(client.getId()).thenReturn(CLIENT_ID);
+        when(client.getClientType()).thenReturn(ClientType.COMPANY);
+        when(client.getName()).thenReturn(COMPANY_NAME);
+        when(client.getIdentificationNumber()).thenReturn(COMPANY_ID);
+        when(client.getEmail()).thenReturn(COMPANY_EMAIL);
+        when(client.getPhone()).thenReturn(COMPANY_PHONE);
+        when(client.getAddress()).thenReturn(COMPANY_ADDRESS);
+        when(client.getBuildings()).thenReturn(List.of(b1, b2));
 
         BuildingDetailsResponse d1 = mock(BuildingDetailsResponse.class);
         BuildingDetailsResponse d2 = mock(BuildingDetailsResponse.class);
@@ -110,16 +142,16 @@ class ClientMapperTest {
         when(buildingMapper.toDetails(b1)).thenReturn(d1);
         when(buildingMapper.toDetails(b2)).thenReturn(d2);
 
-        ClientDetailsResponse result = clientMapper.toDetails(c);
+        ClientDetailsResponse result = clientMapper.toDetails(client);
 
         assertNotNull(result);
-        assertEquals(10L, result.id());
+        assertEquals(CLIENT_ID, result.id());
         assertEquals(ClientType.COMPANY, result.clientType());
-        assertEquals("Company", result.name());
-        assertEquals("C-1", result.identificationNumber());
-        assertEquals("c@c.com", result.email());
-        assertEquals("0700", result.phone());
-        assertEquals("Addr", result.address());
+        assertEquals(COMPANY_NAME, result.name());
+        assertEquals(COMPANY_ID, result.identificationNumber());
+        assertEquals(COMPANY_EMAIL, result.email());
+        assertEquals(COMPANY_PHONE, result.phone());
+        assertEquals(COMPANY_ADDRESS, result.address());
 
         assertNotNull(result.buildings());
         assertEquals(2, result.buildings().size());
@@ -128,5 +160,33 @@ class ClientMapperTest {
 
         verify(buildingMapper).toDetails(b1);
         verify(buildingMapper).toDetails(b2);
+    }
+
+    @Test
+    void applyUpdateAllNullDoesNotChangeAnything() {
+        Client client = new Client(
+                ClientType.COMPANY,
+                OLD_NAME,
+                IDENTIFICATION_1,
+                OLD_EMAIL,
+                OLD_PHONE,
+                OLD_ADDRESS
+        );
+
+        ClientUpdateRequest req = new ClientUpdateRequest(
+                null,
+                null,
+                null,
+                null,
+                null
+        );
+
+        clientMapper.applyUpdate(client, req);
+
+        assertEquals(OLD_NAME, client.getName());
+        assertEquals(OLD_EMAIL, client.getEmail());
+        assertEquals(OLD_PHONE, client.getPhone());
+        assertEquals(OLD_ADDRESS, client.getAddress());
+        assertEquals(IDENTIFICATION_1, client.getIdentificationNumber());
     }
 }

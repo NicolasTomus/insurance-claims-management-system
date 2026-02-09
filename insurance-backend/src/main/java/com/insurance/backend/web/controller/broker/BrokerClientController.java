@@ -35,10 +35,7 @@ public class BrokerClientController {
     @GetMapping
     public Page<ClientSummaryResponse> search(@RequestParam(required = false) String name,
                                               @RequestParam(required = false) String identifier,
-                                              @RequestParam(defaultValue = "0") int page,
-                                              @RequestParam(defaultValue = "20") int size) {
-
-        Pageable pageable = PageRequest.of(page, size, Sort.by("id").descending());
+                                              Pageable pageable) {
         return clientService.search(name, identifier, pageable);
     }
 
