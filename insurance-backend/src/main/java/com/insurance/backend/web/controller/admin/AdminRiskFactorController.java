@@ -1,6 +1,6 @@
 package com.insurance.backend.web.controller.admin;
 
-import com.insurance.backend.service.RiskFactorService;
+import com.insurance.backend.service.risk.RiskFactorService;
 import com.insurance.backend.web.dto.metadata.risk.*;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.*;

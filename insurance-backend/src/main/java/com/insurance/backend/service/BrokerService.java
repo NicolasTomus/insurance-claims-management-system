@@ -15,6 +15,8 @@ import org.springframework.data.domain.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import static org.springframework.util.StringUtils.hasText;
+
 @Service
 public class BrokerService {
 
@@ -82,18 +84,30 @@ public class BrokerService {
 
     @Transactional(readOnly = true)
     public Page<BrokerDetailsResponse> search(String name, String brokerCode, Pageable pageable) {
-        Page<Broker> page;
+        return findBrokers(name, brokerCode, pageable)
+                .map(brokerMapper::toDetails);
+    }
 
-        if (brokerCode != null && !brokerCode.isBlank()) {
-            Broker one = brokerRepository.findByBrokerCode(brokerCode.trim())
-                    .orElseThrow(() -> new NotFoundException("Broker not found for code: " + brokerCode));
-            page = new PageImpl<>(java.util.List.of(one), pageable, 1);
-        } else if (name != null && !name.isBlank()) {
-            page = brokerRepository.findByNameContainingIgnoreCase(name.trim(), pageable);
-        } else {
-            page = brokerRepository.findAll(pageable);
+    private Page<Broker> findBrokers(String name, String brokerCode, Pageable pageable) {
+        if (hasText(brokerCode)) {
+            return pageOf(findByBrokerCodeOrThrow(brokerCode), pageable);
         }
 
-        return page.map(brokerMapper::toDetails);
+        if (hasText(name)) {
+            return brokerRepository.findByNameContainingIgnoreCase(name.trim(), pageable);
+        }
+
+        return brokerRepository.findAll(pageable);
     }
+
+    private Broker findByBrokerCodeOrThrow(String brokerCode) {
+        String code = brokerCode.trim();
+        return brokerRepository.findByBrokerCode(code)
+                .orElseThrow(() -> new NotFoundException("Broker not found for code: " + code));
+    }
+
+    private Page<Broker> pageOf(Broker broker, Pageable pageable) {
+        return new PageImpl<>(java.util.List.of(broker), pageable, 1);
+    }
+
 }
