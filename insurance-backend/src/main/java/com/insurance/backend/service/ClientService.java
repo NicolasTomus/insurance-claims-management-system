@@ -8,6 +8,7 @@ import com.insurance.backend.web.dto.client.ClientSummaryResponse;
 import com.insurance.backend.web.dto.client.ClientUpdateRequest;
 import com.insurance.backend.web.exception.ConflictException;
 import com.insurance.backend.web.exception.NotFoundException;
+import com.insurance.backend.web.mapper.BrokerMapper;
 import com.insurance.backend.web.mapper.ClientMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,6 +18,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Objects;
 
+import static org.springframework.util.StringUtils.hasText;
+
 @Service
 public class ClientService {
 
@@ -24,10 +27,12 @@ public class ClientService {
 
     private final ClientRepository clientRepository;
     private final ClientMapper clientMapper;
+    private final BrokerMapper brokerMapper;
 
-    public ClientService(ClientRepository clientRepository, ClientMapper clientMapper) {
+    public ClientService(ClientRepository clientRepository, ClientMapper clientMapper, BrokerMapper brokerMapper) {
         this.clientRepository = clientRepository;
         this.clientMapper = clientMapper;
+        this.brokerMapper = brokerMapper;
     }
 
     @Transactional
@@ -52,7 +57,8 @@ public class ClientService {
         Client client = clientRepository.findById(clientId)
                 .orElseThrow(() -> new NotFoundException("Client not found: " + clientId));
 
-        if (request.identificationNumber() != null && !Objects.equals(request.identificationNumber(), client.getIdentificationNumber())) {
+        if (hasText(request.identificationNumber())
+                && !Objects.equals(request.identificationNumber(), client.getIdentificationNumber())) {
             throw new ConflictException("Identification number changes are not allowed");
         }
 
@@ -64,18 +70,30 @@ public class ClientService {
 
     @Transactional(readOnly = true)
     public Page<ClientSummaryResponse> search(String name, String identifier, Pageable pageable) {
-        Page<Client> page;
+        return findClient(name, identifier, pageable)
+                .map(clientMapper::toSummary);
+    }
 
-        if (identifier != null && !identifier.isBlank()) {
-            Client one = clientRepository.findByIdentificationNumber(identifier.trim())
-                    .orElseThrow(() -> new NotFoundException("Client not found for identifier: " + identifier));
-            page = new PageImpl<>(java.util.List.of(one), pageable, 1);
-        } else if (name != null && !name.isBlank()) {
-            page = clientRepository.findByNameContainingIgnoreCase(name.trim(), pageable);
-        } else {
-            page = clientRepository.findAll(pageable);
+    private Page<Client> findClient(String name, String identifier, Pageable pageable) {
+        if(hasText(identifier)) {
+            return pageOf(findByIdentifierOfThrow(identifier), pageable);
         }
 
-        return page.map(clientMapper::toSummary);
+        if(hasText(name)) {
+            return  clientRepository.findByNameContainingIgnoreCase(name.trim(), pageable);
+        }
+
+        return clientRepository.findAll(pageable);
     }
+
+    private Client findByIdentifierOfThrow(String identifier) {
+        String code = identifier.trim();
+        return clientRepository.findByIdentificationNumber(identifier)
+                .orElseThrow(() -> new NotFoundException("Client not found for identifier: " + code));
+    }
+
+    private Page<Client> pageOf(Client client, Pageable pageable) {
+        return new PageImpl<>(java.util.List.of(client), pageable, 1);
+    }
+
 }

@@ -9,4 +9,6 @@ import java.util.List;
 public interface RiskFactorConfigurationRepository extends JpaRepository<RiskFactorConfiguration, Long> {
 
     List<RiskFactorConfiguration> findByLevelAndReferenceIdAndActiveTrue(RiskLevel level, Long referenceId);
+
+    boolean existsByLevelAndReferenceIdAndActiveTrue(RiskLevel level, Long referenceId);
 }

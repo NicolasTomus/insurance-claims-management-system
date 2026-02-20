@@ -37,9 +37,17 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(body);
     }
 
-    @ExceptionHandler({NotFoundException.class, ConflictException.class})
+    @ExceptionHandler({NotFoundException.class, ConflictException.class, BadRequestException.class})
     public ResponseEntity<ApiErrorResponse> handleKnown(RuntimeException ex, HttpServletRequest req) {
-        HttpStatus status = ex instanceof NotFoundException ? HttpStatus.NOT_FOUND : HttpStatus.CONFLICT;
+
+        HttpStatus status;
+        if (ex instanceof NotFoundException) {
+            status = HttpStatus.NOT_FOUND;
+        } else if (ex instanceof ConflictException) {
+            status = HttpStatus.CONFLICT;
+        } else {
+            status = HttpStatus.BAD_REQUEST;
+        }
 
         ApiErrorResponse body = new ApiErrorResponse(
                 Instant.now(),

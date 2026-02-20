@@ -7,7 +7,6 @@ import com.insurance.backend.domain.client.Client;
 import com.insurance.backend.domain.metadata.currency.Currency;
 import com.insurance.backend.domain.metadata.fee.FeeConfiguration;
 import com.insurance.backend.domain.metadata.risk.RiskFactorConfiguration;
-import com.insurance.backend.domain.metadata.risk.RiskLevel;
 import com.insurance.backend.domain.policy.Policy;
 import com.insurance.backend.domain.policy.PolicyStatus;
 import com.insurance.backend.infrastructure.persistence.repository.broker.BrokerRepository;
@@ -15,8 +14,8 @@ import com.insurance.backend.infrastructure.persistence.repository.building.Buil
 import com.insurance.backend.infrastructure.persistence.repository.client.ClientRepository;
 import com.insurance.backend.infrastructure.persistence.repository.metadata.currency.CurrencyRepository;
 import com.insurance.backend.infrastructure.persistence.repository.metadata.fee.FeeConfigurationRepository;
-import com.insurance.backend.infrastructure.persistence.repository.metadata.risk.RiskFactorConfigurationRepository;
 import com.insurance.backend.infrastructure.persistence.repository.policy.PolicyRepository;
+import com.insurance.backend.service.risk.RiskFactorStrategy;
 import com.insurance.backend.web.dto.policy.PolicyCancelRequest;
 import com.insurance.backend.web.dto.policy.PolicyCreateDraftRequest;
 import com.insurance.backend.web.dto.policy.PolicyDetailsResponse;
@@ -28,12 +27,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -47,9 +47,10 @@ public class PolicyService {
     private final BrokerRepository brokerRepository;
     private final CurrencyRepository currencyRepository;
     private final FeeConfigurationRepository feeRepository;
-    private final RiskFactorConfigurationRepository riskRepository;
     private final PolicyMapper policyMapper;
     private final PolicyCalculationService calculationService;
+
+    private final List<RiskFactorStrategy> riskStrategies;
 
     public PolicyService(PolicyRepository policyRepository,
                          ClientRepository clientRepository,
@@ -57,79 +58,53 @@ public class PolicyService {
                          BrokerRepository brokerRepository,
                          CurrencyRepository currencyRepository,
                          FeeConfigurationRepository feeRepository,
-                         RiskFactorConfigurationRepository riskRepository,
                          PolicyMapper policyMapper,
-                         PolicyCalculationService calculationService) {
+                         PolicyCalculationService calculationService,
+                         List<RiskFactorStrategy> riskStrategies) {
+
         this.policyRepository = policyRepository;
         this.clientRepository = clientRepository;
         this.buildingRepository = buildingRepository;
         this.brokerRepository = brokerRepository;
         this.currencyRepository = currencyRepository;
         this.feeRepository = feeRepository;
-        this.riskRepository = riskRepository;
         this.policyMapper = policyMapper;
         this.calculationService = calculationService;
+        this.riskStrategies = riskStrategies;
+    }
+
+    @Scheduled(cron = "0 1 0 * * *")
+    @Transactional
+    public void markExpiredPolicies() {
+        int updated = policyRepository.bulkExpire(LocalDate.now(), Instant.now());
+        log.info("Expired {} policies", updated);
     }
 
     @Transactional
     public PolicyDetailsResponse createDraft(PolicyCreateDraftRequest request) {
 
-        Client client = clientRepository.findById(request.clientId())
-                .orElseThrow(() -> new NotFoundException("Client not found: " + request.clientId()));
+        Client client = getClient(request.clientId());
+        Building building = getBuildingOwnedByClient(request.buildingId(), request.clientId());
+        Broker broker = getActiveBroker(request.brokerId());
+        Currency currency = getCurrency(request.currencyId());
 
-        Building building = buildingRepository.findByIdAndOwnerId(request.buildingId(), request.clientId())
-                .orElseThrow(() -> new ConflictException(
-                        "Building " + request.buildingId() + " is not owned by client " + request.clientId()
-                ));
+        List<FeeConfiguration> fees = getFeesForDraft(request);
+        List<RiskFactorConfiguration> risks = getRisksForBuilding(building);
 
-        Broker broker = brokerRepository.findById(request.brokerId())
-                .orElseThrow(() -> new NotFoundException("Broker not found: " + request.brokerId()));
+        Policy policy = createDraftPolicy(request, client, building, broker, currency, fees, risks);
 
-        if (broker.getStatus() != BrokerStatus.ACTIVE) {
-            throw new ConflictException("Broker is inactive: " + broker.getId());
-        }
+        Policy saved = policyRepository.save(policy);
+        log.info("Policy draft created: id={}, policyNumber={}", saved.getId(), saved.getPolicyNumber());
+        return policyMapper.toDetails(saved);
+    }
 
-        Currency currency = currencyRepository.findById(request.currencyId())
-                .orElseThrow(() -> new NotFoundException("Currency not found: " + request.currencyId()));
-
-        List<FeeConfiguration> fees;
-        if (request.feeConfigurationIds() != null && !request.feeConfigurationIds().isEmpty()) {
-            fees = feeRepository.findAllByIdIn(request.feeConfigurationIds());
-        } else {
-            fees = feeRepository.findActiveForDate(request.startDate());
-        }
-
-        List<RiskFactorConfiguration> risks = new ArrayList<>();
-
-        if (building.getCity() != null) {
-            if (building.getCity().getCounty() != null) {
-
-                if (building.getCity().getCounty().getCountry() != null) {
-                    risks.addAll(riskRepository.findByLevelAndReferenceIdAndActiveTrue(
-                                    RiskLevel.COUNTRY, building.getCity().getCounty().getCountry().getId()
-                            )
-                    );
-                }
-
-                risks.addAll(riskRepository.findByLevelAndReferenceIdAndActiveTrue(
-                                RiskLevel.COUNTY, building.getCity().getCounty().getId()
-                        )
-                );
-            }
-
-            risks.addAll(riskRepository.findByLevelAndReferenceIdAndActiveTrue(
-                            RiskLevel.CITY, building.getCity().getId()
-                    )
-            );
-        }
-
-        if (building.getBuildingType() != null) {
-            long typeRef = building.getBuildingType().ordinal();
-            risks.addAll(riskRepository.findByLevelAndReferenceIdAndActiveTrue(
-                            RiskLevel.BUILDING_TYPE, typeRef
-                    )
-            );
-        }
+    private Policy createDraftPolicy(PolicyCreateDraftRequest request,
+                                     Client client,
+                                     Building building,
+                                     Broker broker,
+                                     Currency currency,
+                                     List<FeeConfiguration> fees,
+                                     List<RiskFactorConfiguration> risks) {
 
         String policyNumber = generatePolicyNumber();
 
@@ -137,14 +112,56 @@ public class PolicyService {
         policy.setStatus(PolicyStatus.DRAFT);
 
         policy.setFinalPremiumAmount(
-                calculationService.calculateFinalPremium(policy.getBasePremiumAmount(),
-                        policy.getStartDate(), fees, risks
+                calculationService.calculateFinalPremium(
+                        policy.getBasePremiumAmount(),
+                        policy.getStartDate(),
+                        fees,
+                        risks
                 )
         );
 
-        Policy saved = policyRepository.save(policy);
-        log.info("Policy draft created: id={}, policyNumber={}", saved.getId(), saved.getPolicyNumber());
-        return policyMapper.toDetails(saved);
+        return policy;
+    }
+
+    private Client getClient(Long clientId) {
+        return clientRepository.findById(clientId)
+                .orElseThrow(() -> new NotFoundException("Client not found: " + clientId));
+    }
+
+    private Building getBuildingOwnedByClient(Long buildingId, Long clientId) {
+        return buildingRepository.findByIdAndOwnerId(buildingId, clientId)
+                .orElseThrow(() -> new ConflictException(
+                        "Building " + buildingId + " is not owned by client " + clientId
+                ));
+    }
+
+    private Broker getActiveBroker(Long brokerId) {
+        Broker broker = brokerRepository.findById(brokerId)
+                .orElseThrow(() -> new NotFoundException("Broker not found: " + brokerId));
+
+        if (broker.getStatus() != BrokerStatus.ACTIVE) {
+            throw new ConflictException("Broker is inactive: " + broker.getId());
+        }
+
+        return broker;
+    }
+
+    private Currency getCurrency(Long currencyId) {
+        return currencyRepository.findById(currencyId)
+                .orElseThrow(() -> new NotFoundException("Currency not found: " + currencyId));
+    }
+
+    private List<FeeConfiguration> getFeesForDraft(PolicyCreateDraftRequest request) {
+        if (request.feeConfigurationIds() != null && !request.feeConfigurationIds().isEmpty()) {
+            return feeRepository.findAllByIdIn(request.feeConfigurationIds());
+        }
+        return feeRepository.findActiveForDate(request.startDate());
+    }
+
+    private List<RiskFactorConfiguration> getRisksForBuilding(Building building) {
+        return riskStrategies.stream()
+                .flatMap(s -> s.resolve(building).stream())
+                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -164,16 +181,10 @@ public class PolicyService {
 
     @Transactional
     public PolicyDetailsResponse activate(Long policyId) {
-        Policy policy = policyRepository.findById(policyId)
-                .orElseThrow(() -> new NotFoundException("Policy not found:  " + policyId));
+        Policy policy = getPolicy(policyId);
 
-        if (policy.getStatus() != PolicyStatus.DRAFT) {
-            throw new ConflictException("Only DRAFT policies can be activated");
-        }
-
-        if (policy.getStartDate() != null && policy.getStartDate().isBefore(LocalDate.now())) {
-            throw new ConflictException("Policy start date is in the past, cannot activate");
-        }
+        ensureDraft(policy);
+        ensureStartDateNotInPast(policy);
 
         policy.setStatus(PolicyStatus.ACTIVE);
         policy.setActivatedAt(LocalDateTime.now());
@@ -181,6 +192,23 @@ public class PolicyService {
         Policy saved = policyRepository.save(policy);
         log.info("Policy activated: id={}", saved.getId());
         return policyMapper.toDetails(saved);
+    }
+
+    private Policy getPolicy(Long policyId) {
+        return policyRepository.findById(policyId)
+                .orElseThrow(() -> new NotFoundException("Policy not found:  " + policyId));
+    }
+
+    private void ensureDraft(Policy policy) {
+        if (policy.getStatus() != PolicyStatus.DRAFT) {
+            throw new ConflictException("Only DRAFT policies can be activated");
+        }
+    }
+
+    private void ensureStartDateNotInPast(Policy policy) {
+        if (policy.getStartDate() != null && policy.getStartDate().isBefore(LocalDate.now())) {
+            throw new ConflictException("Policy start date is in the past, cannot activate");
+        }
     }
 
     @Transactional

@@ -70,18 +70,11 @@ public class BuildingService {
 
     @Transactional
     public BuildingDetailsResponse update(Long buildingId, BuildingUpdateRequest request) {
-        Building b = buildingRepository.findById(buildingId)
-                .orElseThrow(() -> new NotFoundException("Building not found: " + buildingId));
+        Building b = getBuilding(buildingId);
 
-        if (request.clientId() != null && !request.clientId().equals(b.getOwner().getId())) {
-            throw new ConflictException("Changing building owner is not allowed");
-        }
+        validateOwnerNotChanged(request, b);
 
-        City newCity = null;
-        if (request.cityId() != null) {
-            newCity = cityRepository.findById(request.cityId())
-                    .orElseThrow(() -> new NotFoundException("City not found: " + request.cityId()));
-        }
+        City newCity = getCityIfProvided(request);
 
         buildingMapper.applyUpdate(b, request, newCity);
         Building saved = buildingRepository.save(b);
@@ -89,4 +82,30 @@ public class BuildingService {
         log.info("Building updated: id={}", saved.getId());
         return buildingMapper.toDetails(saved);
     }
+
+    private Building getBuilding(Long buildingId) {
+        return buildingRepository.findById(buildingId)
+                .orElseThrow(() -> new NotFoundException("Building not found: " + buildingId));
+    }
+
+    private void validateOwnerNotChanged(BuildingUpdateRequest request, Building b) {
+        if (request.clientId() == null) {
+            return;
+        }
+
+        Long currentOwnerId = b.getOwner() != null ? b.getOwner().getId() : null;
+        if (!request.clientId().equals(currentOwnerId)) {
+            throw new ConflictException("Changing building owner is not allowed");
+        }
+    }
+
+    private City getCityIfProvided(BuildingUpdateRequest request) {
+        if (request.cityId() == null) {
+            return null;
+        }
+
+        return cityRepository.findById(request.cityId())
+                .orElseThrow(() -> new NotFoundException("City not found: " + request.cityId()));
+    }
+
 }
