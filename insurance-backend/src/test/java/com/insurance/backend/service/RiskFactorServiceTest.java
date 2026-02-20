@@ -1,11 +1,18 @@
 package com.insurance.backend.service;
 
+import com.insurance.backend.domain.building.BuildingType;
 import com.insurance.backend.domain.metadata.risk.RiskFactorConfiguration;
 import com.insurance.backend.domain.metadata.risk.RiskLevel;
+import com.insurance.backend.infrastructure.persistence.repository.geografy.CityRepository;
+import com.insurance.backend.infrastructure.persistence.repository.geografy.CountyRepository;
+import com.insurance.backend.infrastructure.persistence.repository.geografy.CountryRepository;
 import com.insurance.backend.infrastructure.persistence.repository.metadata.risk.RiskFactorConfigurationRepository;
+import com.insurance.backend.service.risk.RiskFactorService;
 import com.insurance.backend.web.dto.metadata.risk.RiskFactorCreateRequest;
 import com.insurance.backend.web.dto.metadata.risk.RiskFactorResponse;
 import com.insurance.backend.web.dto.metadata.risk.RiskFactorUpdateRequest;
+import com.insurance.backend.web.exception.BadRequestException;
+import com.insurance.backend.web.exception.ConflictException;
 import com.insurance.backend.web.exception.NotFoundException;
 import com.insurance.backend.web.mapper.MetadataMapper;
 import org.junit.jupiter.api.Test;
@@ -25,57 +32,97 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class RiskFactorServiceTest {
 
-    private static final long RISK_ID = 10L;
+    private static final long RISK_ID = 101L;
 
-    private static final int PAGE_NUMBER = 0;
-    private static final int PAGE_SIZE = 10;
-    private static final long TOTAL_ELEMENTS = 2L;
+    @Mock private RiskFactorConfigurationRepository riskRepository;
+    @Mock private MetadataMapper metadataMapper;
+    @Mock private CountryRepository countryRepository;
+    @Mock private CountyRepository countyRepository;
+    @Mock private CityRepository cityRepository;
 
-    private static final long FACTOR_ID_1 = 1L;
-    private static final long FACTOR_ID_2 = 2L;
-    private static final long FACTOR_ID_3 = 3L;
-
-    private static final BigDecimal PCT_0500 = new BigDecimal("0.0500");
-    private static final BigDecimal PCT_0750 = new BigDecimal("0.0750");
-    private static final BigDecimal PCT_1000 = new BigDecimal("0.1000");
-
-    private static final boolean ACTIVE_TRUE = true;
-    private static final boolean ACTIVE_FALSE = false;
-
-    private static final RiskLevel LEVEL_COUNTRY = RiskLevel.COUNTRY;
-    private static final RiskLevel LEVEL_CITY = RiskLevel.CITY;
-    private static final RiskLevel LEVEL_COUNTY = RiskLevel.COUNTY;
-
-    @Mock
-    private RiskFactorConfigurationRepository riskRepository;
-
-    @Mock
-    private MetadataMapper metadataMapper;
-
-    @InjectMocks
-    private RiskFactorService riskFactorService;
+    @InjectMocks private RiskFactorService riskFactorService;
 
     @Test
-    void createShouldMapToEntitySaveAndReturnResponse() {
+    void createShouldThrowBadRequestWhenReferenceIdNull() {
         RiskFactorCreateRequest req = new RiskFactorCreateRequest(
-                LEVEL_COUNTRY,
-                FACTOR_ID_1,
-                PCT_0500,
-                ACTIVE_TRUE
+                RiskLevel.COUNTRY, null, new BigDecimal("0.10"), true
+        );
+
+        assertThrows(BadRequestException.class, () -> riskFactorService.create(req));
+
+        verifyNoInteractions(riskRepository, metadataMapper, countryRepository, countyRepository, cityRepository);
+    }
+
+    @Test
+    void createShouldThrowBadRequestWhenUnknownBuildingTypeId() {
+        long invalidId = BuildingType.values().length;
+        RiskFactorCreateRequest req = new RiskFactorCreateRequest(
+                RiskLevel.BUILDING_TYPE, invalidId, new BigDecimal("0.10"), false
+        );
+
+        assertThrows(BadRequestException.class, () -> riskFactorService.create(req));
+
+        verifyNoInteractions(riskRepository, metadataMapper, countryRepository, countyRepository, cityRepository);
+    }
+
+    @Test
+    void createShouldThrowBadRequestWhenGeoReferenceDoesNotExist() {
+        long refId = 77L;
+        RiskFactorCreateRequest req = new RiskFactorCreateRequest(
+                RiskLevel.CITY, refId, new BigDecimal("0.10"), false
+        );
+
+        when(cityRepository.existsById(refId)).thenReturn(false);
+
+        assertThrows(BadRequestException.class, () -> riskFactorService.create(req));
+
+        verify(cityRepository).existsById(refId);
+        verifyNoMoreInteractions(cityRepository);
+        verifyNoInteractions(riskRepository, metadataMapper, countryRepository, countyRepository);
+    }
+
+    @Test
+    void createShouldThrowConflictWhenActiveAlreadyExistsForLevelAndReference() {
+        long refId = 1L;
+        RiskFactorCreateRequest req = new RiskFactorCreateRequest(
+                RiskLevel.COUNTRY, refId, new BigDecimal("0.10"), true
+        );
+
+        when(countryRepository.existsById(refId)).thenReturn(true);
+        when(riskRepository.findByLevelAndReferenceIdAndActiveTrue(RiskLevel.COUNTRY, refId))
+                .thenReturn(List.of(mock(RiskFactorConfiguration.class)));
+
+        assertThrows(ConflictException.class, () -> riskFactorService.create(req));
+
+        verify(countryRepository).existsById(refId);
+        verify(riskRepository).findByLevelAndReferenceIdAndActiveTrue(RiskLevel.COUNTRY, refId);
+        verifyNoInteractions(metadataMapper);
+    }
+
+    @Test
+    void createShouldSaveAndReturnResponseWhenOk() {
+        long refId = 1L;
+        RiskFactorCreateRequest req = new RiskFactorCreateRequest(
+                RiskLevel.COUNTRY, refId, new BigDecimal("0.10"), true
         );
 
         RiskFactorConfiguration entity = mock(RiskFactorConfiguration.class);
         RiskFactorConfiguration saved = mock(RiskFactorConfiguration.class);
-        RiskFactorResponse dto = mock(RiskFactorResponse.class);
+        RiskFactorResponse response = mock(RiskFactorResponse.class);
+
+        when(countryRepository.existsById(refId)).thenReturn(true);
+        when(riskRepository.findByLevelAndReferenceIdAndActiveTrue(RiskLevel.COUNTRY, refId)).thenReturn(List.of());
 
         when(metadataMapper.toEntity(req)).thenReturn(entity);
         when(riskRepository.save(entity)).thenReturn(saved);
-        when(metadataMapper.toResponse(saved)).thenReturn(dto);
+        when(metadataMapper.toResponse(saved)).thenReturn(response);
 
         RiskFactorResponse result = riskFactorService.create(req);
 
-        assertSame(dto, result);
+        assertSame(response, result);
 
+        verify(countryRepository).existsById(refId);
+        verify(riskRepository).findByLevelAndReferenceIdAndActiveTrue(RiskLevel.COUNTRY, refId);
         verify(metadataMapper).toEntity(req);
         verify(riskRepository).save(entity);
         verify(metadataMapper).toResponse(saved);
@@ -92,31 +139,9 @@ class RiskFactorServiceTest {
     }
 
     @Test
-    void getByIdShouldReturnResponseWhenExists() {
-        RiskFactorConfiguration risk = mock(RiskFactorConfiguration.class);
-        RiskFactorResponse dto = mock(RiskFactorResponse.class);
-
-        when(riskRepository.findById(RISK_ID)).thenReturn(Optional.of(risk));
-        when(metadataMapper.toResponse(risk)).thenReturn(dto);
-
-        RiskFactorResponse result = riskFactorService.getById(RISK_ID);
-
-        assertSame(dto, result);
-
-        verify(riskRepository).findById(RISK_ID);
-        verify(metadataMapper).toResponse(risk);
-    }
-
-    @Test
     void updateShouldThrowNotFoundWhenMissing() {
+        RiskFactorUpdateRequest req = new RiskFactorUpdateRequest(null, null, null, null);
         when(riskRepository.findById(RISK_ID)).thenReturn(Optional.empty());
-
-        RiskFactorUpdateRequest req = new RiskFactorUpdateRequest(
-                LEVEL_CITY,
-                FACTOR_ID_3,
-                PCT_1000,
-                ACTIVE_FALSE
-        );
 
         assertThrows(NotFoundException.class, () -> riskFactorService.update(RISK_ID, req));
 
@@ -126,24 +151,21 @@ class RiskFactorServiceTest {
 
     @Test
     void updateShouldApplyUpdateSaveAndReturnResponse() {
+        RiskFactorUpdateRequest req = new RiskFactorUpdateRequest(
+                RiskLevel.COUNTRY, 2L, new BigDecimal("0.20"), Boolean.FALSE
+        );
+
         RiskFactorConfiguration risk = mock(RiskFactorConfiguration.class);
         RiskFactorConfiguration saved = mock(RiskFactorConfiguration.class);
-        RiskFactorResponse dto = mock(RiskFactorResponse.class);
-
-        RiskFactorUpdateRequest req = new RiskFactorUpdateRequest(
-                LEVEL_COUNTY,
-                FACTOR_ID_2,
-                PCT_0750,
-                ACTIVE_TRUE
-        );
+        RiskFactorResponse response = mock(RiskFactorResponse.class);
 
         when(riskRepository.findById(RISK_ID)).thenReturn(Optional.of(risk));
         when(riskRepository.save(risk)).thenReturn(saved);
-        when(metadataMapper.toResponse(saved)).thenReturn(dto);
+        when(metadataMapper.toResponse(saved)).thenReturn(response);
 
         RiskFactorResponse result = riskFactorService.update(RISK_ID, req);
 
-        assertSame(dto, result);
+        assertSame(response, result);
 
         verify(riskRepository).findById(RISK_ID);
         verify(metadataMapper).applyUpdate(risk, req);
@@ -152,24 +174,24 @@ class RiskFactorServiceTest {
     }
 
     @Test
-    void listShouldMapEntitiesToResponses() {
-        Pageable pageable = PageRequest.of(PAGE_NUMBER, PAGE_SIZE);
+    void listShouldReturnMappedPage() {
+        Pageable pageable = PageRequest.of(0, 2, Sort.by("id").descending());
 
         RiskFactorConfiguration r1 = mock(RiskFactorConfiguration.class);
         RiskFactorConfiguration r2 = mock(RiskFactorConfiguration.class);
+        RiskFactorResponse resp1 = mock(RiskFactorResponse.class);
+        RiskFactorResponse resp2 = mock(RiskFactorResponse.class);
 
-        RiskFactorResponse dto1 = mock(RiskFactorResponse.class);
-        RiskFactorResponse dto2 = mock(RiskFactorResponse.class);
+        Page<RiskFactorConfiguration> page = new PageImpl<>(List.of(r1, r2), pageable, 2);
 
-        when(riskRepository.findAll(pageable)).thenReturn(new PageImpl<>(List.of(r1, r2), pageable, TOTAL_ELEMENTS));
-        when(metadataMapper.toResponse(r1)).thenReturn(dto1);
-        when(metadataMapper.toResponse(r2)).thenReturn(dto2);
+        when(riskRepository.findAll(pageable)).thenReturn(page);
+        when(metadataMapper.toResponse(r1)).thenReturn(resp1);
+        when(metadataMapper.toResponse(r2)).thenReturn(resp2);
 
         Page<RiskFactorResponse> result = riskFactorService.list(pageable);
 
-        assertEquals(TOTAL_ELEMENTS, result.getTotalElements());
-        assertSame(dto1, result.getContent().get(0));
-        assertSame(dto2, result.getContent().get(1));
+        assertEquals(2, result.getTotalElements());
+        assertEquals(List.of(resp1, resp2), result.getContent());
 
         verify(riskRepository).findAll(pageable);
         verify(metadataMapper).toResponse(r1);

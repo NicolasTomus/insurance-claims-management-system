@@ -88,7 +88,7 @@ public class RiskFactorService {
 
         if (request.level() == RiskLevel.BUILDING_TYPE) {
             long id = request.referenceId();
-            long max = BuildingType.values().length - 1;
+            long max = BuildingType.values().length - 1L;
 
             if (0 > id || id > max) {
                 throw new BadRequestException("Unknown building type id: " + id + " (allowed: 1=Residential, 2=Office, 3=Industrial)");
