@@ -8,7 +8,6 @@ import com.insurance.backend.web.dto.client.ClientSummaryResponse;
 import com.insurance.backend.web.dto.client.ClientUpdateRequest;
 import com.insurance.backend.web.exception.ConflictException;
 import com.insurance.backend.web.exception.NotFoundException;
-import com.insurance.backend.web.mapper.BrokerMapper;
 import com.insurance.backend.web.mapper.ClientMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,12 +26,10 @@ public class ClientService {
 
     private final ClientRepository clientRepository;
     private final ClientMapper clientMapper;
-    private final BrokerMapper brokerMapper;
 
-    public ClientService(ClientRepository clientRepository, ClientMapper clientMapper, BrokerMapper brokerMapper) {
+    public ClientService(ClientRepository clientRepository, ClientMapper clientMapper) {
         this.clientRepository = clientRepository;
         this.clientMapper = clientMapper;
-        this.brokerMapper = brokerMapper;
     }
 
     @Transactional
